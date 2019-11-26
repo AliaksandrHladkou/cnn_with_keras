@@ -10,11 +10,13 @@ import keras
 from keras.datasets import cifar10
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
+from keras.layers import Dense, Dropout, Activation, Flatten, BatchNormalization
 from keras.layers import Conv2D, MaxPooling2D
+from keras import regularizers
+import numpy as np
 import os
 
-batch_size = 32
+batch_size = 64
 num_classes = 10
 epochs = 10
 data_augmentation = True
@@ -23,6 +25,7 @@ save_dir = os.path.join(os.getcwd(), 'saved_models')
 model_name = 'keras_cifar10_trained_model.h5'
 
 
+# making learning rate to be dependent on num. epochs
 def lr_schedule(epoch):
     lrate = 0.001
     if epoch > 75:
@@ -42,31 +45,44 @@ print(x_test.shape[0], 'test samples')
 y_train = keras.utils.to_categorical(y_train, num_classes)
 y_test = keras.utils.to_categorical(y_test, num_classes)
 
+# adding batch normalization layer and changing activation to elu.
+weight_decay = 1e-4
 model = Sequential()
-model.add(Conv2D(32, (3, 3), padding='same',
-                 input_shape=x_train.shape[1:]))
+model.add(
+    Conv2D(32, (3, 3), padding='same', kernel_regularizer=regularizers.l2(weight_decay), input_shape=x_train.shape[1:]))
 model.add(Activation('elu'))
-model.add(Conv2D(32, (3, 3)))
-model.add(Activation('relu'))
+model.add(BatchNormalization())
+model.add(Conv2D(32, (3, 3), padding='same', kernel_regularizer=regularizers.l2(weight_decay)))
+model.add(Activation('elu'))
+model.add(BatchNormalization())
 model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Dropout(0.25))
+model.add(Dropout(0.2))
 
-model.add(Conv2D(64, (3, 3), padding='same'))
-model.add(Activation('relu'))
-model.add(Conv2D(64, (3, 3)))
-model.add(Activation('relu'))
+model.add(Conv2D(64, (3, 3), padding='same', kernel_regularizer=regularizers.l2(weight_decay)))
+model.add(Activation('elu'))
+model.add(BatchNormalization())
+model.add(Conv2D(64, (3, 3), padding='same', kernel_regularizer=regularizers.l2(weight_decay)))
+model.add(Activation('elu'))
+model.add(BatchNormalization())
 model.add(MaxPooling2D(pool_size=(2, 2)))
-model.add(Dropout(0.25))
+model.add(Dropout(0.3))
+
+model.add(Conv2D(128, (3, 3), padding='same', kernel_regularizer=regularizers.l2(weight_decay)))
+model.add(Activation('elu'))
+model.add(BatchNormalization())
+model.add(Conv2D(128, (3, 3), padding='same', kernel_regularizer=regularizers.l2(weight_decay)))
+model.add(Activation('elu'))
+model.add(BatchNormalization())
+model.add(MaxPooling2D(pool_size=(2, 2)))
+model.add(Dropout(0.4))
 
 model.add(Flatten())
-model.add(Dense(512))
-model.add(Activation('relu'))
-model.add(Dropout(0.5))
-model.add(Dense(num_classes))
-model.add(Activation('softmax'))
+model.add(Dense(num_classes, activation='softmax'))
+
+model.summary()
 
 # initiate RMSprop optimizer
-opt = keras.optimizers.RMSprop(learning_rate=0.0001, decay=1e-6)
+opt = keras.optimizers.RMSprop(learning_rate=0.001, decay=1e-6)
 
 # Let's train the model using RMSprop
 model.compile(loss='categorical_crossentropy',
@@ -77,6 +93,12 @@ x_train = x_train.astype('float32')
 x_test = x_test.astype('float32')
 x_train /= 255
 x_test /= 255
+
+# adding z-score to be save with gradients
+mean = np.mean(x_train, axis=(0, 1, 2, 3))
+std = np.std(x_train, axis=(0, 1, 2, 3))
+x_train = (x_train - mean) / (std + 1e-7)
+x_test = (x_test - mean) / (std + 1e-7)
 
 if not data_augmentation:
     print('Not using data augmentation.')
